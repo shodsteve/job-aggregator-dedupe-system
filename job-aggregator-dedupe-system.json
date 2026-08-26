@@ -1,0 +1,282 @@
+{
+  "workflowName": "Job Aggregator & Deduplication System",
+  "workflowId": "job-aggregator-dedupe-v1",
+  "sourceType": "Visual Reconstruction from Diagram",
+  "description": "Daily job aggregation system that pulls from 3+ RSS sources, normalizes jobs to standard schema, deduplicates, filters by recency, and stores in Notion. Perfect for building a centralized job database.",
+  "createdAt": "2026-08-17T00:00:00.000Z",
+  "purpose": "Aggregate remote jobs from multiple sources, deduplicate, and maintain a single source of truth in Notion",
+  "stats": {
+    "nodes": 14,
+    "triggers": 1,
+    "rss_sources": 3,
+    "max_jobs_per_run": 300
+  },
+  "features": [
+    "Daily 2 PM scheduler trigger",
+    "Global config for placeholder customization",
+    "3 independent RSS feed sources (RemoteOK, We Work Remotely, Remotive)",
+    "Parallel job fetching from all sources",
+    "Automatic source tagging (manual per source)",
+    "Job normalization to standard schema",
+    "Notion database storage",
+    "Duplicate detection via existing job IDs",
+    "Recency filtering (recent jobs only)",
+    "Merge & append for combining sources",
+    "Error handling for failed RSS feeds"
+  ],
+  "workflow_stages": {
+    "stage_1_trigger": "Daily 2 PM scheduler fires workflow",
+    "stage_2_config": "Global Config node loads placeholders (edit here for custom settings)",
+    "stage_3_collection": "3 RSS sources fetch jobs in parallel (RemoteOK, We Work Remotely, Remotive)",
+    "stage_4_tagging": "Each source tagged with origin (RemoteOK, WeWorkRemotely, Remotive)",
+    "stage_5_merge": "Merge All Sources — appends all 100+ items into single stream",
+    "stage_6_normalize": "Normalize Jobs — converts each source's schema to standard job object",
+    "stage_7_store": "Store Job in Notion — writes normalized jobs to Notion database",
+    "stage_8_dedupe_check": "Get Existing Job IDs — fetches all previously stored job IDs from Notion",
+    "stage_9_merge_for_dedupe": "Merge For Dedupe — combines current jobs with existing IDs for comparison",
+    "stage_10_filter": "Recency and Duplicate Filter — removes old/duplicate jobs, keeps only new ones"
+  },
+  "rss_sources": [
+    {
+      "name": "RemoteOK RSS",
+      "url": "https://remoteok.com/remote-dev-jobs.rss",
+      "items_per_run": 100,
+      "frequency": "Updated daily",
+      "focus": "Remote dev jobs globally"
+    },
+    {
+      "name": "We Work Remotely RSS",
+      "url": "https://weworkremotely.com/categories/remote-programming-jobs.rss",
+      "items_per_run": 100,
+      "frequency": "Updated daily",
+      "focus": "Remote programming jobs (US/International)"
+    },
+    {
+      "name": "Remotive RSS",
+      "url": "https://remotive.com/api/remote-jobs?category=software-dev&limit=100",
+      "items_per_run": 100,
+      "frequency": "Updated daily",
+      "focus": "Remote software dev roles"
+    }
+  ],
+  "normalization_schema": {
+    "fields": [
+      "job_id (unique identifier)",
+      "title (job title)",
+      "company (company name)",
+      "location (job location / remote)",
+      "description (job description snippet)",
+      "url (apply link)",
+      "source (RemoteOK / WeWorkRemotely / Remotive)",
+      "source_tag (manual tag for filtering)",
+      "posted_date (when job was posted)",
+      "is_remote (boolean)",
+      "salary (salary range if provided)",
+      "created_at (when added to our database)",
+      "last_updated (last sync date)",
+      "is_duplicate (boolean flag)"
+    ]
+  },
+  "deduplication_logic": {
+    "step_1": "Fetch all existing job IDs from Notion database",
+    "step_2": "Compare current batch against existing IDs",
+    "step_3": "Flag duplicates (same job from same source)",
+    "step_4": "Keep cross-source duplicates if score improved (e.g., different company posting same role)",
+    "step_5": "Filter out jobs older than N days (recency filter)",
+    "step_6": "Store only new, non-duplicate, recent jobs to Notion"
+  },
+  "nodes_breakdown": [
+    {
+      "name": "Daily 2PM Scheduler",
+      "type": "Schedule Trigger",
+      "config": "Runs every day at 2 PM (14:00)",
+      "outputs": ["trigger_time", "run_date"]
+    },
+    {
+      "name": "Global Config",
+      "type": "Code Node",
+      "description": "Edit this node to customize settings for entire workflow",
+      "editable_fields": [
+        "rss_urls (feed URLs)",
+        "job_limit_per_source (e.g., 100)",
+        "recency_days (e.g., 30 days)",
+        "notion_database_id",
+        "custom_tags",
+        "excluded_keywords",
+        "target_roles"
+      ]
+    },
+    {
+      "name": "RemoteOK RSS",
+      "type": "HTTP Request / RSS Feed Reader",
+      "config": "Fetch from RemoteOK RSS feed",
+      "output": "Array of 100+ job objects"
+    },
+    {
+      "name": "We Work Remotely RSS",
+      "type": "HTTP Request / RSS Feed Reader",
+      "config": "Fetch from WeWorkRemotely RSS feed",
+      "output": "Array of 100+ job objects"
+    },
+    {
+      "name": "Remotive RSS",
+      "type": "HTTP Request / API",
+      "config": "Fetch from Remotive API (free endpoint)",
+      "output": "Array of 100+ job objects"
+    },
+    {
+      "name": "Tag Source - RemoteOK",
+      "type": "Set/Map Node",
+      "operation": "Add field: source = 'RemoteOK'",
+      "output": "Jobs with source tag"
+    },
+    {
+      "name": "Tag Source - We Work Remotely",
+      "type": "Set/Map Node",
+      "operation": "Add field: source = 'WeWorkRemotely'",
+      "output": "Jobs with source tag"
+    },
+    {
+      "name": "Tag Source - Remotive",
+      "type": "Set/Map Node",
+      "operation": "Add field: source = 'Remotive'",
+      "output": "Jobs with source tag"
+    },
+    {
+      "name": "Merge All Sources",
+      "type": "Merge Node",
+      "mode": "append",
+      "inputs": 3,
+      "description": "Combine all 3 sources into single stream",
+      "output": "~300 jobs total"
+    },
+    {
+      "name": "Normalize Jobs",
+      "type": "Code Node",
+      "description": "Convert each source's job structure to standard schema",
+      "logic": "Transform source-specific fields → standard job object with all required fields"
+    },
+    {
+      "name": "Store Job in Notion",
+      "type": "Notion Node",
+      "operation": "Create database page",
+      "description": "Write each normalized job to Notion database",
+      "fields_mapped": ["title", "company", "location", "url", "source", "posted_date", "salary", "description"]
+    },
+    {
+      "name": "Get Existing Job IDs",
+      "type": "Notion Node",
+      "operation": "Query database",
+      "description": "Fetch all existing job IDs from Notion to check for duplicates",
+      "filter": "Select only 'job_id' and 'source' fields"
+    },
+    {
+      "name": "Merge For Dedupe",
+      "type": "Merge Node",
+      "mode": "combine",
+      "inputs": 2,
+      "description": "Combine current batch with existing IDs for comparison"
+    },
+    {
+      "name": "Recency and Duplicate Filter",
+      "type": "Code Node",
+      "description": "Remove duplicates and old jobs",
+      "filters": [
+        "Remove jobs already in Notion (by job_id + source)",
+        "Remove jobs older than recency_days",
+        "Keep only recent, new jobs",
+        "Flag any found duplicates"
+      ]
+    }
+  ],
+  "integrations": {
+    "scheduling": "n8n Scheduler",
+    "rss_feeds": "RemoteOK, We Work Remotely, Remotive (public)",
+    "database": "Notion API",
+    "data_processing": "Code nodes (JavaScript)"
+  },
+  "configuration_required": {
+    "notion": [
+      "Create Notion database with schema matching normalized_schema",
+      "Get Notion Integration Token",
+      "Get Notion Database ID",
+      "Share database with integration"
+    ],
+    "global_config": [
+      "Set job_limit_per_source (default: 100)",
+      "Set recency_days (default: 30)",
+      "Set notion_database_id",
+      "Add any custom tags or filters"
+    ]
+  },
+  "setupInstructions": {
+    "step_1": "Create a Notion database called 'Remote Jobs' with the normalized_schema fields",
+    "step_2": "Create Notion Integration at notion.so/my-integrations",
+    "step_3": "Share the database with the integration",
+    "step_4": "Copy the Notion Database ID to Global Config node",
+    "step_5": "Add Notion API credentials to n8n",
+    "step_6": "Test with 'Test Workflow' button",
+    "step_7": "Enable scheduler to activate daily runs at 2 PM"
+  },
+  "performance": {
+    "average_runtime": "30-60 seconds per run",
+    "jobs_processed_per_run": "~300 (100 per source)",
+    "new_jobs_per_run": "~50-100 (after deduplication & recency filter)",
+    "notion_api_calls": "300+ (1 per job) + dedup queries"
+  },
+  "error_handling": {
+    "rss_feed_down": "Log error, continue with other sources",
+    "notion_api_error": "Retry with exponential backoff, log failure",
+    "normalization_failed": "Skip job, log error, continue",
+    "duplicate_detection_failed": "Default to storing job (safe fallback)"
+  },
+  "extensibility": {
+    "add_more_sources": "Duplicate RSS nodes, add Tag Source, wire to Merge All Sources",
+    "custom_filtering": "Add additional filters after 'Recency and Duplicate Filter'",
+    "email_alerts": "Add email node to notify on new high-quality jobs",
+    "scoring": "Add AI scoring node to rank jobs by quality/fit",
+    "integrations": [
+      "Send new jobs to Slack channel",
+      "Create calendar events for applying",
+      "Export to CSV weekly",
+      "Sync to other job trackers"
+    ]
+  },
+  "github_friendly_name": "job-aggregator-dedupe-system",
+  "github_description": "🔄 Job Aggregator & Deduplication System | Pulls from 3+ RSS sources daily, normalizes, deduplicates, stores in Notion | Maintain a single job database | Recency filtering",
+  "tags": [
+    "job-aggregation",
+    "rss-feeds",
+    "notion-integration",
+    "deduplication",
+    "data-pipeline",
+    "n8n",
+    "remote-jobs"
+  ],
+  "use_cases": [
+    "Build a personal job database of remote opportunities",
+    "Feed jobs to a separate application automation workflow",
+    "Monitor multiple job boards from one place",
+    "Track job market trends over time",
+    "Deduplicate job postings across platforms",
+    "Create a dataset for job market analysis"
+  ],
+  "related_workflows": [
+    "job-application-automator (consumes output of this workflow)"
+  ],
+  "potential_enhancements": [
+    "Add ML-based duplicate detection (not just ID matching)",
+    "Parse job descriptions for skills/requirements",
+    "Auto-classify jobs by role/level",
+    "Store historical data for analytics",
+    "Add salary range extraction",
+    "Detect job title standardization",
+    "Export weekly reports"
+  ],
+  "backup_metadata": {
+    "exported_at": "2026-08-26T12:00:00Z",
+    "backup_tool": "Claude AI from visual reconstruction",
+    "source": "Workflow diagram screenshot",
+    "status": "Template/Reference"
+  }
+}
